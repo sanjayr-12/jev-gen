@@ -1,11 +1,11 @@
-import { choice, noul, TypeSafeClient } from "@typesafe-ai/sdk";
+import { choice, noul, TypeSafeClient, type NoulQuestion } from "@typesafe-ai/sdk";
 import {
   CHARACTER_CLASSES,
   DIGIT_CRITERIA,
   LETTER_CRITERIA,
   PUNCTUATION_CRITERIA,
 } from "./choices.js";
-import type { StepDecision } from "./types.js";
+import type { LetterCandidate, StepDecision } from "./types.js";
 
 export const SHOULD_END_INSTRUCTIONS =
   "Given the text in text_so_far, is the text naturally complete at its end so that no additional character should be written if this text were continued as natural written English?";
@@ -24,6 +24,9 @@ export const DIGIT_INSTRUCTIONS =
 
 export const PUNCTUATION_INSTRUCTIONS =
   "If the next character is a punctuation or symbol character, which single one would most naturally appear immediately after the final character of text_so_far?";
+
+export const LETTER_PLAUSIBLE_INSTRUCTIONS =
+  "Given the text in `text_so_far` and the proposed next character in `proposed_character`, would accepting this character leave the current unfinished word shown in `proposed_text` as a plausible prefix or complete word for a natural continuation of the text? The current word does NOT need to already be a complete word. Answer YES when the resulting letters could reasonably continue into a natural word that fits the preceding context. Answer NO when accepting the character makes the current word unlikely to develop into a natural word that fits the context.";
 
 export class JevClient {
   private readonly client: TypeSafeClient;
@@ -66,5 +69,36 @@ export class JevClient {
       punctuation: response.answers.next_punctuation,
       latencyMs,
     };
+  }
+
+  async validateLetterCandidates(
+    textSoFar: string,
+    candidates: LetterCandidate[]
+  ): Promise<number[]> {
+    const questions: Record<string, NoulQuestion> = {};
+    for (const [index, candidate] of candidates.entries()) {
+      questions[`candidate_${index + 1}`] = noul(
+        {
+          question: LETTER_PLAUSIBLE_INSTRUCTIONS,
+          proposed_character: candidate.character,
+          proposed_text: candidate.proposedText,
+        },
+        {
+          true: "The resulting word is a plausible prefix or complete word for a natural continuation of the text.",
+          false: "The resulting word is unlikely to develop into a natural word that fits the context.",
+        }
+      );
+    }
+    const response = await this.client.systemOne({
+      model: "jev-latest",
+      state: {
+        text_so_far: textSoFar,
+        last_character: textSoFar.slice(-1),
+      },
+      questions,
+    });
+    return candidates.map(
+      (_, index) => response.answers[`candidate_${index + 1}`].noul
+    );
   }
 }

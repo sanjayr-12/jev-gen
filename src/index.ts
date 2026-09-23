@@ -25,6 +25,7 @@ async function main(): Promise<void> {
     };
     return generate(
       (textSoFar, lastSelections) => client.askNextStep(textSoFar, lastSelections),
+      (textSoFar, candidates) => client.validateLetterCandidates(textSoFar, candidates),
       config
     );
   });

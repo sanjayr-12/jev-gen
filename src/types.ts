@@ -22,6 +22,27 @@ export interface StepDecision {
 
 export type AskNextStep = (textSoFar: string, lastSelections: string[]) => Promise<StepDecision>;
 
+export interface LetterCandidate {
+  selectedChoice: string;
+  character: string;
+  proposedText: string;
+  probability: number;
+}
+
+export interface CandidateCheck {
+  selectedChoice: string;
+  character: string;
+  proposedText: string;
+  probability: number;
+  plausible: number;
+  accepted: boolean;
+}
+
+export type ValidateLetterCandidates = (
+  textSoFar: string,
+  candidates: LetterCandidate[]
+) => Promise<number[]>;
+
 export interface StepSelection {
   characterClass: string;
   classProbability: number;
@@ -37,6 +58,7 @@ export interface GenerationStep {
   textBefore: string;
   decision: StepDecision;
   selection: StepSelection | null;
+  validation: CandidateCheck[] | null;
 }
 
 export interface GeneratorConfig {
@@ -45,7 +67,11 @@ export interface GeneratorConfig {
   debug: boolean;
 }
 
-export type StopReason = "end-decision" | "degeneration" | "max-characters";
+export type StopReason =
+  | "end-decision"
+  | "degeneration"
+  | "validation-failed"
+  | "max-characters";
 
 export interface GenerationResult {
   text: string;

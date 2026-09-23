@@ -2,3 +2,5 @@
 .env
 node_modules/
 skills-lock.json
+dist
+docs.md

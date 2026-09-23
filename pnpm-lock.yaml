@@ -165,6 +165,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@typesafe-ai/sdk':
+        specifier: ^0.6.0
+        version: 0.6.0
     devDependencies:
       '@types/node':
         specifier: ^26.6.2
@@ -336,6 +340,10 @@ packages:
 
   '@types/node@26.6.2':
     resolution: {integrity: sha512-X1P21scMv4zGKLYqjdGjaKa7COa0RKVYYZZN/NfvLQ1JegxFhdhpZG/Lyn8AXx6CDUavKAd11v6BvfpkDByK8g==}
+
+  '@typesafe-ai/sdk@0.6.0':
+    resolution: {integrity: sha512-IddX+Q0XM+VagOUZFeP7wZjaO4SHMdvnh2zEBdrZZnXedWI3BNK1lKhMx3ayrkFWvVLbVcUHJy6AVZlY+e6Jaw==}
+    engines: {node: '>=20'}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -563,6 +571,8 @@ snapshots:
   '@types/node@26.6.2':
     dependencies:
       undici-types: 8.9.0
+
+  '@typesafe-ai/sdk@0.6.0': {}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true

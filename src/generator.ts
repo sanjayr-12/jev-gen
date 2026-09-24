@@ -1,4 +1,4 @@
-import { CHOICE_CHARACTERS } from "./choices.js";
+import { BOUNDARY_IDS, CHOICE_CHARACTERS } from "./choices.js";
 import type {
   AskNextStep,
   CandidateCheck,
@@ -6,17 +6,18 @@ import type {
   GeneratorConfig,
   GenerationResult,
   GenerationStep,
-  LetterCandidate,
   StepDecision,
   StepSelection,
   StopReason,
-  ValidateLetterCandidates,
+  TextCandidate,
+  ValidateCandidates,
 } from "./types.js";
 
 const END_THRESHOLD = 0.5;
 const PLAUSIBILITY_THRESHOLD = 0.5;
 const SELECTION_WINDOW = 8;
-const VALIDATION_CANDIDATES = 5;
+const LETTER_CANDIDATES = 5;
+const SPACE_ID = "SPACE";
 
 function argmax(probabilities: Record<string, number>): { id: string; probability: number } {
   let id = "";
@@ -28,6 +29,14 @@ function argmax(probabilities: Record<string, number>): { id: string; probabilit
     }
   }
   return { id, probability };
+}
+
+function characterFor(selectedChoice: string): string {
+  const character = CHOICE_CHARACTERS[selectedChoice];
+  if (character === undefined) {
+    throw new Error(`Unknown choice id: ${selectedChoice}`);
+  }
+  return character;
 }
 
 function memberAnswerFor(classId: string, decision: StepDecision): ChoiceAnswer | null {
@@ -48,10 +57,6 @@ function selectFromClass(
   const source = memberAnswer ?? decision.characterClass;
   const pick = argmax(source.probabilities);
   const selectedChoice = memberAnswer ? pick.id : classPick.id;
-  const character = CHOICE_CHARACTERS[selectedChoice];
-  if (character === undefined) {
-    throw new Error(`Unknown choice id: ${selectedChoice}`);
-  }
   return {
     characterClass: classPick.id,
     classProbability: classPick.probability,
@@ -59,26 +64,35 @@ function selectFromClass(
     selectedProbability: memberAnswer ? pick.probability : classPick.probability,
     topLevelChoice: source.choice,
     confidence: source.confidence,
-    character,
+    character: characterFor(selectedChoice),
   };
 }
 
-function rankLetterCandidates(decision: StepDecision, textBefore: string): LetterCandidate[] {
+function rankLetterCandidates(decision: StepDecision, textBefore: string): TextCandidate[] {
   return Object.entries(decision.letter.probabilities)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, VALIDATION_CANDIDATES)
-    .map(([id, probability]) => {
-      const character = CHOICE_CHARACTERS[id];
-      if (character === undefined) {
-        throw new Error(`Unknown choice id: ${id}`);
-      }
-      return {
-        selectedChoice: id,
-        character,
-        proposedText: textBefore + character,
-        probability,
-      };
-    });
+    .slice(0, LETTER_CANDIDATES)
+    .map(([id, probability]) => ({
+      selectedChoice: id,
+      character: characterFor(id),
+      proposedText: textBefore + characterFor(id),
+      probability,
+    }));
+}
+
+function buildCandidates(
+  decision: StepDecision,
+  textBefore: string,
+  classPick: { id: string; probability: number }
+): TextCandidate[] {
+  const letters = rankLetterCandidates(decision, textBefore);
+  const space: TextCandidate = {
+    selectedChoice: SPACE_ID,
+    character: characterFor(SPACE_ID),
+    proposedText: textBefore + characterFor(SPACE_ID),
+    probability: decision.characterClass.probabilities[SPACE_ID] ?? classPick.probability,
+  };
+  return classPick.id === SPACE_ID ? [space, ...letters] : [...letters, space];
 }
 
 function formatValidation(checks: CandidateCheck[]): string {
@@ -91,9 +105,13 @@ function formatValidation(checks: CandidateCheck[]): string {
   return `${label} tries=${tries}${rejected ? ` (${rejected} rejected)` : ""}`;
 }
 
+function formatDegenerate(value: number | null): string {
+  return value === null ? "-" : value.toFixed(4);
+}
+
 function formatStep(step: GenerationStep): string {
   const index = String(step.step).padStart(3, "0");
-  const suffix = `should_end=${step.decision.shouldEnd.toFixed(4)} degen=${step.decision.isDegenerate.toFixed(4)}`;
+  const suffix = `should_end=${step.decision.shouldEnd.toFixed(4)} degen=${formatDegenerate(step.decision.isDegenerate)}`;
   const validationSuffix = step.validation === null ? "" : ` ${formatValidation(step.validation)}`;
   if (step.selection === null) {
     return `[${index}] stop ${suffix}${validationSuffix}`;
@@ -121,7 +139,7 @@ function formatChecks(checks: CandidateCheck[]): string {
 
 function printDebug(decision: StepDecision, validation: CandidateCheck[] | null): void {
   console.log(`      should_end ${decision.shouldEnd.toFixed(4)}`);
-  console.log(`      is_degenerate ${decision.isDegenerate.toFixed(4)}`);
+  console.log(`      is_degenerate ${formatDegenerate(decision.isDegenerate)}`);
   console.log(formatDistribution("class", decision.characterClass.probabilities));
   console.log(formatDistribution("letter", decision.letter.probabilities));
   console.log(formatDistribution("digit", decision.digit.probabilities));
@@ -134,20 +152,25 @@ function printDebug(decision: StepDecision, validation: CandidateCheck[] | null)
 
 export async function generate(
   askNextStep: AskNextStep,
-  validateLetterCandidates: ValidateLetterCandidates,
+  validateCandidates: ValidateCandidates,
   config: GeneratorConfig
 ): Promise<GenerationResult> {
   let textSoFar = config.startingPrompt;
   let generatedCharacters = 0;
+  let lastCommitWasBoundary = false;
   const selections: string[] = [];
   const steps: GenerationStep[] = [];
   let stopReason: StopReason = "max-characters";
 
   while (generatedCharacters < config.maxGeneratedCharacters) {
     const textBefore = textSoFar;
-    const decision = await askNextStep(textSoFar, selections.slice(-SELECTION_WINDOW));
+    const decision = await askNextStep(
+      textSoFar,
+      selections.slice(-SELECTION_WINDOW),
+      lastCommitWasBoundary
+    );
     const termination =
-      decision.isDegenerate >= END_THRESHOLD
+      decision.isDegenerate !== null && decision.isDegenerate >= END_THRESHOLD
         ? "degeneration"
         : decision.shouldEnd >= END_THRESHOLD
           ? "end-decision"
@@ -174,9 +197,9 @@ export async function generate(
     let selection: StepSelection;
     let validation: CandidateCheck[] | null = null;
 
-    if (classPick.id === "LETTER") {
-      const candidates = rankLetterCandidates(decision, textBefore);
-      const plausible = await validateLetterCandidates(textBefore, candidates);
+    if (classPick.id === "LETTER" || classPick.id === SPACE_ID) {
+      const candidates = buildCandidates(decision, textBefore, classPick);
+      const plausible = await validateCandidates(textBefore, candidates);
       validation = candidates.map((candidate, index) => ({
         ...candidate,
         plausible: plausible[index],
@@ -203,13 +226,14 @@ export async function generate(
       }
       validation[acceptedIndex].accepted = true;
       const accepted = validation[acceptedIndex];
+      const source = accepted.selectedChoice === SPACE_ID ? decision.characterClass : decision.letter;
       selection = {
-        characterClass: "LETTER",
+        characterClass: classPick.id,
         classProbability: classPick.probability,
         selectedChoice: accepted.selectedChoice,
         selectedProbability: accepted.probability,
-        topLevelChoice: decision.letter.choice,
-        confidence: decision.letter.confidence,
+        topLevelChoice: source.choice,
+        confidence: source.confidence,
         character: accepted.character,
       };
     } else {
@@ -231,6 +255,7 @@ export async function generate(
 
     textSoFar = textBefore + selection.character;
     selections.push(selection.selectedChoice);
+    lastCommitWasBoundary = BOUNDARY_IDS.has(selection.selectedChoice);
     generatedCharacters += 1;
     console.log(`text: ${JSON.stringify(textSoFar)}`);
     if (generatedCharacters >= config.maxGeneratedCharacters) {

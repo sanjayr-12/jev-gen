@@ -12,7 +12,7 @@ export interface ChoiceAnswer {
 
 export interface StepDecision {
   shouldEnd: number;
-  isDegenerate: number;
+  isDegenerate: number | null;
   characterClass: ChoiceAnswer;
   letter: ChoiceAnswer;
   digit: ChoiceAnswer;
@@ -20,9 +20,13 @@ export interface StepDecision {
   latencyMs: number;
 }
 
-export type AskNextStep = (textSoFar: string, lastSelections: string[]) => Promise<StepDecision>;
+export type AskNextStep = (
+  textSoFar: string,
+  lastSelections: string[],
+  evaluateDegeneration: boolean
+) => Promise<StepDecision>;
 
-export interface LetterCandidate {
+export interface TextCandidate {
   selectedChoice: string;
   character: string;
   proposedText: string;
@@ -38,9 +42,9 @@ export interface CandidateCheck {
   accepted: boolean;
 }
 
-export type ValidateLetterCandidates = (
+export type ValidateCandidates = (
   textSoFar: string,
-  candidates: LetterCandidate[]
+  candidates: TextCandidate[]
 ) => Promise<number[]>;
 
 export interface StepSelection {

@@ -66,10 +66,15 @@ function charactersOf(definitions: ChoiceDefinition[]): Record<string, string> {
   );
 }
 
-export const CHARACTER_CLASSES: Record<string, string> = {
+export const CHARACTER_CLASSES = {
   LETTER: "a letter character (a-z, A-Z)",
   DIGIT: "a digit character (0-9)",
-  SPACE: "a single space character separating words",
+  SPACE: {
+    character: " ",
+    "ASCII decimal": "32",
+    "ASCII hex": "0x20",
+    description: "ASCII space character",
+  },
   NEWLINE: "a line break / newline character",
   PUNCTUATION: "a punctuation or symbol character such as . , ? ! : ; ' - ( )",
 };
@@ -77,6 +82,14 @@ export const CHARACTER_CLASSES: Record<string, string> = {
 export const LETTER_CRITERIA = criteriaOf(LETTER_DEFINITIONS);
 export const DIGIT_CRITERIA = criteriaOf(DIGIT_DEFINITIONS);
 export const PUNCTUATION_CRITERIA = criteriaOf(PUNCTUATION_CHOICES);
+
+export const BOUNDARY_IDS = new Set([
+  "SPACE",
+  "NEWLINE",
+  ...PUNCTUATION_CHOICES.map((definition) => definition.id).filter(
+    (id) => id !== "APOSTROPHE" && id !== "HYPHEN"
+  ),
+]);
 
 export const CHOICE_CHARACTERS: Record<string, string> = {
   ...charactersOf(LETTER_DEFINITIONS),

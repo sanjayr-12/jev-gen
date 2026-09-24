@@ -24,8 +24,9 @@ async function main(): Promise<void> {
       debug: false,
     };
     return generate(
-      (textSoFar, lastSelections) => client.askNextStep(textSoFar, lastSelections),
-      (textSoFar, candidates) => client.validateLetterCandidates(textSoFar, candidates),
+      (textSoFar, lastSelections, evaluateDegeneration) =>
+        client.askNextStep(textSoFar, lastSelections, evaluateDegeneration),
+      (textSoFar, candidates) => client.validateCandidates(textSoFar, candidates),
       config
     );
   });

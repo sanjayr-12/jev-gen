@@ -1,22 +1,24 @@
 import { existsSync } from "node:fs";
+import { ClefClient } from "./clef.js";
 import { startCli } from "./cli.js";
 import { generate } from "./generator.js";
-import { JevClient } from "./jev.js";
 import type { GeneratorConfig } from "./types.js";
 
-function loadApiKey(): string {
+function loadCredentials(): { accountId: string; apiToken: string } {
   if (existsSync(".env")) {
     process.loadEnvFile(".env");
   }
-  const apiKey = process.env.JEV_API_KEY;
-  if (!apiKey) {
-    throw new Error("JEV_API_KEY is not set");
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  if (!accountId || !apiToken) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are not set");
   }
-  return apiKey;
+  return { accountId, apiToken };
 }
 
 async function main(): Promise<void> {
-  const client = new JevClient(loadApiKey());
+  const { accountId, apiToken } = loadCredentials();
+  const client = new ClefClient(accountId, apiToken);
   await startCli((startingText) => {
     const config: GeneratorConfig = {
       startingPrompt: startingText,
